@@ -6,6 +6,15 @@ import scipy.optimize
 
 class CameraCalibration:
     def __init__(self, nx, ny, square_size, img_dir):
+        """
+        Initializes the CameraCalibration class with given parameters.
+        
+        Parameters:
+        nx: Number of inside corners in x direction
+        ny: Number of inside corners in y direction
+        square_size: Size of a square in the chessboard (in mm)
+        img_dir: Directory containing calibration images
+        """
         self.nx = nx
         self.ny = ny
         self.square_size = square_size
@@ -16,6 +25,15 @@ class CameraCalibration:
         self.num_images = 0
 
     def get_img_points(self, image):
+        """
+        Extracts image points from a calibration image.
+
+        Parameters:
+        image: Calibration image
+
+        Returns:
+        Image points if corners are found, otherwise None
+        """
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         ret, corners = cv2.findChessboardCorners(gray, (self.nx, self.ny), None)
@@ -27,6 +45,12 @@ class CameraCalibration:
         return None
 
     def get_world_points(self):
+        """
+        Generates world points for the chessboard pattern.
+
+        Returns:
+        World points array
+        """
         x, y = np.meshgrid(np.linspace(0, self.nx - 1, self.nx), np.linspace(0, self.ny - 1, self.ny))
         x = np.flip((x.reshape(-1, 1) * self.square_size), axis=0)
         y = (y.reshape(-1, 1) * self.square_size)
@@ -34,11 +58,31 @@ class CameraCalibration:
 
     @staticmethod
     def get_homography(points1, points2):
+        """
+        Computes homography matrix from world points to image points.
+
+        Parameters:
+        points1: World points
+        points2: Image points
+
+        Returns:
+        Homography matrix
+        """
         H, _ = cv2.findHomography(points1, points2)
         return H
 
     @staticmethod
     def compute_Vij(H, i, j):
+        """
+        Computes the v_ij vector used in calculating the intrinsic matrix.
+
+        Parameters:
+        H: Homography matrix
+        i, j: Indices for the v_ij calculation
+
+        Returns:
+        v_ij vector
+        """
         i, j = i - 1, j - 1
         v_ij = np.array([H[0, i] * H[0, j],
                          H[0, i] * H[1, j] + H[1, i] * H[0, j],
@@ -50,6 +94,15 @@ class CameraCalibration:
 
     @staticmethod
     def compute_V(H):
+        """
+        Constructs the V matrix used for calculating the intrinsic matrix.
+
+        Parameters:
+        H: List of homography matrices
+
+        Returns:
+        V matrix
+        """
         V = []
         for h in H:
             V.append(CameraCalibration.compute_Vij(h, 1, 2).T)
@@ -58,10 +111,28 @@ class CameraCalibration:
 
     @staticmethod
     def compute_B(V):
+        """
+        Computes the b vector from the SVD of the V matrix.
+
+        Parameters:
+        V: V matrix
+
+        Returns:
+        b vector
+        """
         _, _, v = np.linalg.svd(V)
         return v[-1, :]
 
     def compute_K(self, H):
+        """
+        Computes the intrinsic matrix K using the homography matrices.
+
+        Parameters:
+        H: List of homography matrices
+
+        Returns:
+        Intrinsic matrix K
+        """
         V = self.compute_V(H)
         b = self.compute_B(V)
         b11, b12, b22, b13, b23, b33 = b
@@ -80,6 +151,16 @@ class CameraCalibration:
 
     @staticmethod
     def compute_Rt(K, H):
+        """
+        Computes the extrinsic parameters [R|t] for each image.
+
+        Parameters:
+        K: Intrinsic matrix
+        H: List of homography matrices
+
+        Returns:
+        List of extrinsic matrices [R|t]
+        """
         extrinsic = []
         K_inv = np.linalg.inv(K)
         for h in H:
@@ -95,6 +176,17 @@ class CameraCalibration:
 
     @staticmethod
     def projection(initial_params, world_points, RT):
+        """
+        Projects world points to image points using given parameters.
+
+        Parameters:
+        initial_params: Initial parameters for the projection
+        world_points: World points to be projected
+        RT: Extrinsic matrix [R|t]
+
+        Returns:
+        Projected image points
+        """
         alpha, beta, gamma, u0, v0, k1, k2 = initial_params
         K = np.array([[alpha, gamma, u0],
                       [0, beta, v0],
@@ -119,6 +211,18 @@ class CameraCalibration:
         return np.array(m_i_)
 
     def reprojection_error(self, initial_params, world_points, img_points_set, RT):
+        """
+        Computes the reprojection error.
+
+        Parameters:
+        initial_params: Initial parameters for the projection
+        world_points: List of world points
+        img_points_set: List of image points
+        RT: List of extrinsic matrices [R|t]
+
+        Returns:
+        List of reprojection errors
+        """
         final_error = []
         for i, RT3 in enumerate(RT):
             mi_hat = self.projection(initial_params, world_points[i], RT3)
@@ -129,6 +233,18 @@ class CameraCalibration:
         return final_error
 
     def loss(self, initial_params, world_points, img_points_set, RT):
+        """
+        Computes the loss function for optimization.
+
+        Parameters:
+        initial_params: Initial parameters for the projection
+        world_points: List of world points
+        img_points_set: List of image points
+        RT: List of extrinsic matrices [R|t]
+
+        Returns:
+        List of loss values
+        """
         final_error = []
         for i, RT3 in enumerate(RT):
             mi_hat = self.projection(initial_params, world_points[i], RT3)
@@ -139,19 +255,30 @@ class CameraCalibration:
         return final_error
 
     def optimize(self, initial_params, world_points_set, img_points_set, RT):
-        opt = scipy.optimize.least_squares(
-            fun=self.loss, x0=initial_params, method="lm", args=(world_points_set, img_points_set, RT))
-        params = opt.x
+        """
+        Optimizes the initial parameters to minimize reprojection error.
 
+        Parameters:
+        initial_params: Initial parameters for the projection
+        world_points_set: List of world points sets
+        img_points_set: List of image points sets
+        RT: List of extrinsic matrices [R|t]
+
+        Returns:
+        Optimized intrinsic matrix K and distortion coefficients
+        """
+        opt = scipy.optimize.least_squares(fun=self.loss, x0=initial_params, method="lm", args=[world_points_set, img_points_set, RT])
+        params = opt.x
         alpha, beta, gamma, u0, v0, k1, k2 = params
         K_new = np.array([[alpha, gamma, u0],
                           [0, beta, v0],
                           [0, 0, 1]])
-        kc = (k1, k2)
-
-        return K_new, kc
+        return K_new, (k1, k2)
 
     def calibrate(self):
+        """
+        Main function to perform camera calibration.
+        """
         for image_path in sorted(glob.glob(f"{self.img_dir}/*.jpg")):
             img = cv2.imread(image_path)
             img_points = self.get_img_points(img)
@@ -171,11 +298,11 @@ class CameraCalibration:
 
         initial_params = [K_init[0, 0], K_init[1, 1], K_init[0, 1], K_init[0, 2], K_init[1, 2], 0, 0]
         projection_error = self.reprojection_error(initial_params, self.world_points_set, self.img_points_set, RT)
-        print("Projection error:\n", np.mean(projection_error))
+        print("Initial projection error:\n", np.mean(projection_error))
 
         K_new, kc = self.optimize(initial_params, self.world_points_set, self.img_points_set, RT)
         print("The new intrinsic matrix K is:\n", K_new)
-        print("kc is:\n", kc)
+        print("Distortion coefficients are:\n", kc)
 
         RT_new = self.compute_Rt(K_new, self.H_matrix_set)
         print("The new extrinsic matrix [R|t] is:\n", RT_new[0])
