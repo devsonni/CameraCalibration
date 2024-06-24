@@ -57,9 +57,6 @@ python3 Wrapper.py
 
 <div style="display: inline-block;">
     <img src="https://github.com/devsonni/CameraCalibration/blob/main/Results/result0.png" alt="Result 1" width="200" />
-</div>
-
-<div style="display: inline-block;">
     <img src="https://github.com/devsonni/CameraCalibration/blob/main/Results/result1.png" alt="Result 2" width="200" />
 </div>
 
