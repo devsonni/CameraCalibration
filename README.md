@@ -43,7 +43,7 @@ pip install numpy opencv-python matplotlib scipy
 ```
 
 ## To run the code (calibrate your camera with custom dataset)         
-- Put all of your images in the "Calibration_Imgs" folder then run the Wrapper file.     
+Put all of your images in the "Calibration_Imgs" folder then run the Wrapper file.     
 
 ```sh
 python3 Wrapper.py
